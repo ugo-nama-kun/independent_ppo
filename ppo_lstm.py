@@ -19,27 +19,22 @@ class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(1, 32, 8, stride=4)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
-            nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
-            nn.ReLU(),
+            layer_init(nn.Linear(np.prod(envs.single_observation_space.shape), 256)),
+            nn.ELU(),
+            layer_init(nn.Linear(256, 128)),
+            nn.ELU(),
         )
-        self.lstm = nn.LSTM(512, 128)
+        self.lstm = nn.LSTM(128, 64)
         for name, param in self.lstm.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
             elif "weight" in name:
                 nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(128, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(128, 1), std=1)
+        self.actor = layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(64, 1), std=1)
 
     def get_states(self, x, lstm_state, done):
-        hidden = self.network(x / 255.0)
+        hidden = self.network(x)
 
         # LSTM logic
         batch_size = lstm_state[0].shape[1]
