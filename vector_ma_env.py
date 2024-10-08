@@ -1,4 +1,4 @@
-"""Base class for vectorized environments."""
+"""Base class for vectorized environments for multi-agent RL."""
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 import numpy as np
@@ -120,7 +120,6 @@ class VectorMAEnv(ParallelEnv):
         self.closed = True
 
     def _add_info(self, infos: dict, info: dict, env_num: int) -> dict:
-        # info の中身が ndarrayを仮定？
         for k in info.keys():
             if k not in infos:
                 info_array, array_mask = self._init_info_arrays(type(info[k]))

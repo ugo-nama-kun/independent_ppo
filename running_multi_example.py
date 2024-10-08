@@ -40,7 +40,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "SimpleReference"
     """the id of the environment"""
-    total_timesteps: int = 1_000_000
+    total_timesteps: int = 50_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 0.003
     """the learning rate of the optimizer"""
@@ -81,13 +81,13 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    save_every: int = 10
+    save_every: int = 1000
 
 
 def make_env():
     def thunk():
-        env = simple_v3.parallel_env(continuous_actions=False)
-        # env = simple_reference_v3.parallel_env(continuous_actions=False)
+        # env = simple_v3.parallel_env(continuous_actions=False)
+        env = simple_reference_v3.parallel_env(continuous_actions=False)
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -203,6 +203,6 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-    ppo.save_model(dir_name="final")
+    ippo_agent.save_model(dir_name="final")
     ma_envs.close()
     writer.close()

@@ -16,7 +16,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-class Agent(nn.Module):
+class Model(nn.Module):
     def __init__(self, envs):
         super().__init__()
         self.network = nn.Sequential(
@@ -73,27 +73,28 @@ class Agent(nn.Module):
 
 
 class PPO_LSTM_V:
-    def __init__(self, envs, device, args):
+    def __init__(self, envs, device, args, test=False):
         self.args = args
         self.device = device
         self.single_action_space = envs.single_action_space
         self.single_observation_space = envs.single_observation_space
 
-        self.agent = Agent(envs).to(device)
+        self.model = Model(envs).to(device)
 
-        self.optimizer = optim.Adam(self.agent.parameters(), lr=args.learning_rate, eps=1e-5)
+        if not test:
+            self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate, eps=1e-5)
 
-        # ALGO Logic: Storage setup
-        self.obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-        self.actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
-        self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            # ALGO Logic: Storage setup
+            self.obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+            self.actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+            self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         self.lstm_state = (
-            torch.zeros(self.agent.lstm.num_layers, args.num_envs, self.agent.lstm.hidden_size).to(device),
-            torch.zeros(self.agent.lstm.num_layers, args.num_envs, self.agent.lstm.hidden_size).to(device),
+            torch.zeros(self.model.lstm.num_layers, args.num_envs, self.model.lstm.hidden_size).to(device),
+            torch.zeros(self.model.lstm.num_layers, args.num_envs, self.model.lstm.hidden_size).to(device),
         )  # hidden and cell states (see https://youtu.be/8HyCNIVRbSU)
 
         # saving lstm state at the start of rollouts
@@ -104,10 +105,16 @@ class PPO_LSTM_V:
 
         self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
 
+    def eval(self):
+        self.model.eval()
+
+    def train(self):
+        self.model.train()
+
     def reset_lstm_state(self):
         self.lstm_state = (
-            torch.zeros(self.agent.lstm.num_layers, self.args.num_envs, self.agent.lstm.hidden_size).to(self.device),
-            torch.zeros(self.agent.lstm.num_layers, self.args.num_envs, self.agent.lstm.hidden_size).to(self.device),
+            torch.zeros(self.model.lstm.num_layers, self.args.num_envs, self.model.lstm.hidden_size).to(self.device),
+            torch.zeros(self.model.lstm.num_layers, self.args.num_envs, self.model.lstm.hidden_size).to(self.device),
         )  # hidden and cell states (see https://youtu.be/8HyCNIVRbSU)
 
     def save_initial_lstm_state(self):
@@ -125,7 +132,7 @@ class PPO_LSTM_V:
 
     def get_action_and_value(self, obs, done):
         with torch.no_grad():
-            action, logprob, _, value, self.lstm_state = self.agent.get_action_and_value(
+            action, logprob, _, value, self.lstm_state = self.model.get_action_and_value(
                 obs, self.lstm_state, done
             )
             value = value.flatten()
@@ -142,7 +149,7 @@ class PPO_LSTM_V:
     def update(self, next_obs, next_done):
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = self.agent.get_value(
+            next_value = self.model.get_value(
                 next_obs,
                 self.lstm_state,
                 next_done,
@@ -182,7 +189,7 @@ class PPO_LSTM_V:
                 mbenvinds = envinds[start:end]
                 mb_inds = flatinds[:, mbenvinds].ravel()  # be really careful about the index
 
-                _, newlogprob, entropy, newvalue, _ = self.agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, _ = self.model.get_action_and_value(
                     b_obs[mb_inds],
                     (self.initial_lstm_state[0][:, mbenvinds], self.initial_lstm_state[1][:, mbenvinds]),
                     b_dones[mb_inds],
@@ -226,7 +233,7 @@ class PPO_LSTM_V:
 
                 self.optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.agent.parameters(), self.args.max_grad_norm)
+                nn.utils.clip_grad_norm_(self.model.parameters(), self.args.max_grad_norm)
                 self.optimizer.step()
 
             if self.args.target_kl is not None and approx_kl > self.args.target_kl:
@@ -249,10 +256,14 @@ class PPO_LSTM_V:
         )
 
     def save_model(self, dir_name=None):
-        path = f"saved_models/ppo-{self.create_at}"
+        path = f"saved_models/ppo-vision_{self.create_at}"
         if dir_name is not None:
             path = os.path.join(path, dir_name)
         os.makedirs(path, exist_ok=True)
 
-        filepath = os.path.join(path, f"ppo_{self.args.env_id}.pth")
-        torch.save(self.agent.state_dict(), filepath)
+        filepath = os.path.join(path, f"ppo-vision_{self.args.env_id}.pth")
+        torch.save(self.model.state_dict(), filepath)
+
+    def load_model(self, file_path):
+        assert isinstance(file_path, str)
+        self.model.load_state_dict(torch.load(file_path))

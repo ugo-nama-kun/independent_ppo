@@ -19,19 +19,19 @@ class Model(nn.Module):
     def __init__(self, action_space, observation_space):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Linear(np.prod(observation_space.shape), 256)),
+            layer_init(nn.Linear(np.prod(observation_space.shape), 64)),
             nn.ELU(),
-            layer_init(nn.Linear(256, 128)),
+            layer_init(nn.Linear(64, 32)),
             nn.ELU(),
         )
-        self.lstm = nn.LSTM(128, 64)
+        self.lstm = nn.LSTM(32, 32)
         for name, param in self.lstm.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
             elif "weight" in name:
                 nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(64, action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(64, 1), std=1)
+        self.actor = layer_init(nn.Linear(32, action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(32, 1), std=1)
 
     def get_states(self, x, lstm_state, done):
         hidden = self.network(x)
@@ -67,7 +67,7 @@ class Model(nn.Module):
 
 
 class PPO_LSTM:
-    def __init__(self, agent_id, env, device, args):
+    def __init__(self, agent_id, env, device, args, test=False):
         self.agent_id = agent_id
         self.args = args
         self.device = device
@@ -76,15 +76,16 @@ class PPO_LSTM:
 
         self.model = Model(self.single_action_space, self.single_observation_space).to(device)
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate, eps=1e-5)
+        if not test:
+            self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate, eps=1e-5)
 
-        # ALGO Logic: Storage setup
-        self.obs = torch.zeros((args.num_steps, args.num_envs) + self.single_observation_space.shape).to(device)
-        self.actions = torch.zeros((args.num_steps, args.num_envs) + self.single_action_space.shape).to(device)
-        self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        self.values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            # ALGO Logic: Storage setup
+            self.obs = torch.zeros((args.num_steps, args.num_envs) + self.single_observation_space.shape).to(device)
+            self.actions = torch.zeros((args.num_steps, args.num_envs) + self.single_action_space.shape).to(device)
+            self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+            self.values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         self.lstm_state = (
             torch.zeros(self.model.lstm.num_layers, args.num_envs, self.model.lstm.hidden_size).to(device),
@@ -96,6 +97,12 @@ class PPO_LSTM:
             self.lstm_state[0].clone(),
             self.lstm_state[1].clone()
         )
+
+    def eval(self):
+        self.model.eval()
+
+    def train(self):
+        self.model.train()
 
     def reset_lstm_state(self):
         self.lstm_state = (
@@ -244,17 +251,25 @@ class PPO_LSTM:
 
 
 class IPPO_LSTM:
-    def __init__(self, ma_envs, device, args):
+    def __init__(self, ma_envs, device, args, test=False):
         self.args = args
         self.device = device
 
         self.possible_agents = ma_envs.ma_envs[0].possible_agents
         self.agents = {
-            agent: PPO_LSTM(agent, ma_envs.ma_envs[0], device, args)
+            agent: PPO_LSTM(agent, ma_envs.ma_envs[0], device, args, test=test)
             for agent in ma_envs.ma_envs[0].possible_agents
         }
 
         self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+
+    def eval(self):
+        for agent in self.agents.values():
+            agent.eval()
+
+    def train(self):
+        for agent in self.agents.values():
+            agent.train()
 
     def reset_lstm_state(self):
         for agent_ in self.agents.values():
@@ -302,3 +317,10 @@ class IPPO_LSTM:
         for agent_id, agent in self.agents.items():
             filepath = os.path.join(path, f"ippo_{self.args.env_id}_{agent_id}.pth")
             torch.save(agent.model.state_dict(), filepath)
+
+        print(f" Saved at {path}")
+
+    def load_model(self, file_path):
+        assert isinstance(file_path, str)
+        for agent_id, agent in self.agents.items():
+            agent.model.load_state_dict(torch.load(file_path + "_" + agent_id + ".pth", weights_only=True))

@@ -1,4 +1,4 @@
-"""A synchronous vector environment."""
+"""A synchronous vector environment for multi-agent RL."""
 from copy import deepcopy
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union, Dict
 
