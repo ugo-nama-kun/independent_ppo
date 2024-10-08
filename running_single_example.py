@@ -78,6 +78,8 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    save_every: int = 10
+
 
 def make_env(env_id, idx, capture_video, run_name):
     def thunk():
@@ -132,7 +134,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ppo_agent0 = PPO_LSTM(envs, device, args)
+    ppo_agent = PPO_LSTM(envs, device, args)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -142,20 +144,26 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     # reset ppo lstm state
-    ppo_agent0.reset_lstm_state()
+    ppo_agent.reset_lstm_state()
 
+    ppo_agent.save_model(dir_name=str(1))
     for iteration in range(1, args.num_iterations + 1):
+        # save
+        if np.mod(iteration, args.save_every) == 0:
+            print(f"SAVE Models. @ {iteration}")
+            ppo_agent.save_model(dir_name=str(iteration))
+
         # saving initial lstm state of the rollout
-        ppo_agent0.save_initial_lstm_state()
+        ppo_agent.save_initial_lstm_state()
 
         # Annealing the rate if instructed to do so.
-        ppo_agent0.update_learning_rate(iteration)
+        ppo_agent.update_learning_rate(iteration)
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            action, logprob, values = ppo_agent0.get_action_and_value(next_obs, next_done)
+            action, logprob, values = ppo_agent.get_action_and_value(next_obs, next_done)
 
             # copy previous obs and done
             next_done_prev, next_obs_prev = next_done.detach(), next_obs.detach()
@@ -164,7 +172,7 @@ if __name__ == "__main__":
             next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
 
             # store experience here
-            ppo_agent0.collect(step, next_done_prev, next_obs_prev, action, logprob, values, reward)
+            ppo_agent.collect(step, next_done_prev, next_obs_prev, action, logprob, values, reward)
 
             next_done = np.logical_or(terminations, truncations)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -177,7 +185,7 @@ if __name__ == "__main__":
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
         # optimize
-        metrics = ppo_agent0.update(next_obs, next_done)
+        metrics = ppo_agent.update(next_obs, next_done)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         writer.add_scalar("charts/learning_rate", metrics[0], global_step)
@@ -191,5 +199,6 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
+    ppo_agent.save_model(dir_name="final")
     envs.close()
     writer.close()

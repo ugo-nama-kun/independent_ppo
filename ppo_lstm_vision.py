@@ -1,3 +1,4 @@
+import datetime
 import os
 from dataclasses import dataclass
 
@@ -35,7 +36,7 @@ class Agent(nn.Module):
                 nn.init.constant_(param, 0)
             elif "weight" in name:
                 nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(128, envs.single_joint_action_space.n), std=0.01)
+        self.actor = layer_init(nn.Linear(128, envs.single_action_space.n), std=0.01)
         self.critic = layer_init(nn.Linear(128, 1), std=1)
 
     def get_states(self, x, lstm_state, done):
@@ -75,16 +76,16 @@ class PPO_LSTM_V:
     def __init__(self, envs, device, args):
         self.args = args
         self.device = device
-        self.single_action_space = envs.single_joint_action_space
-        self.single_observation_space = envs.single_joint_observation_space
+        self.single_action_space = envs.single_action_space
+        self.single_observation_space = envs.single_observation_space
 
         self.agent = Agent(envs).to(device)
 
         self.optimizer = optim.Adam(self.agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
         # ALGO Logic: Storage setup
-        self.obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_joint_observation_space.shape).to(device)
-        self.actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_joint_action_space.shape).to(device)
+        self.obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+        self.actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
         self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
         self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
         self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -100,6 +101,8 @@ class PPO_LSTM_V:
             self.lstm_state[0].clone(),
             self.lstm_state[1].clone()
         )
+
+        self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
 
     def reset_lstm_state(self):
         self.lstm_state = (
@@ -244,3 +247,12 @@ class PPO_LSTM_V:
             np.mean(clipfracs),
             explained_var,
         )
+
+    def save_model(self, dir_name=None):
+        path = f"saved_models/ppo-{self.create_at}"
+        if dir_name is not None:
+            path = os.path.join(path, dir_name)
+        os.makedirs(path, exist_ok=True)
+
+        filepath = os.path.join(path, f"ppo_{self.args.env_id}.pth")
+        torch.save(self.agent.state_dict(), filepath)

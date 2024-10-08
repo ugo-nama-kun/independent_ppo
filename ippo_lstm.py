@@ -1,15 +1,12 @@
+import datetime
 import os
-from collections import OrderedDict
-from dataclasses import dataclass
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from pygame.examples.scroll import draw_arrow
 
 from torch.distributions.categorical import Categorical
-from wandb.wandb_agent import agent
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -113,7 +110,7 @@ class PPO_LSTM:
             self.lstm_state[1].clone()
         )
 
-    def update_learning_rate(self, iteration:int):
+    def update_learning_rate(self, iteration: int):
         if self.args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / self.args.num_iterations
             lrnow = frac * self.args.learning_rate
@@ -127,7 +124,7 @@ class PPO_LSTM:
             value = value.flatten()
         return action, logprob, value
 
-    def collect(self, step:int, done, obs, action, logprob, value, reward):
+    def collect(self, step: int, done, obs, action, logprob, value, reward):
         self.obs[step] = obs
         self.dones[step] = done
         self.actions[step] = action
@@ -153,7 +150,8 @@ class PPO_LSTM:
                     nextnonterminal = 1.0 - self.dones[t + 1]
                     nextvalues = self.values[t + 1]
                 delta = self.rewards[t] + self.args.gamma * nextvalues * nextnonterminal - self.values[t]
-                advantages[t] = lastgaelam = delta + self.args.gamma * self.args.gae_lambda * nextnonterminal * lastgaelam
+                advantages[
+                    t] = lastgaelam = delta + self.args.gamma * self.args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + self.values
 
         # flatten the batch
@@ -256,6 +254,8 @@ class IPPO_LSTM:
             for agent in ma_envs.ma_envs[0].possible_agents
         }
 
+        self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+
     def reset_lstm_state(self):
         for agent_ in self.agents.values():
             agent_.reset_lstm_state()
@@ -273,17 +273,18 @@ class IPPO_LSTM:
         logprobs = {}
         values = {}
 
-        # TODO: refine by using arrays
         for agent_id in self.possible_agents:
-            actions[agent_id], logprobs[agent_id], values[agent_id] = self.agents[agent_id].get_action_and_value(obss[agent_id], dones[agent_id])
+            actions[agent_id], logprobs[agent_id], values[agent_id] = self.agents[agent_id].get_action_and_value(
+                obss[agent_id], dones[agent_id])
 
         return actions, logprobs, values
 
-    def collect(self, step:int, dones, obss, actions, logprobs, values, rewards):
+    def collect(self, step: int, dones, obss, actions, logprobs, values, rewards):
         for agent_id in self.possible_agents:
             self.agents[agent_id].collect(
                 step,
-                dones[agent_id], obss[agent_id], actions[agent_id], logprobs[agent_id], values[agent_id], rewards[agent_id]
+                dones[agent_id], obss[agent_id], actions[agent_id], logprobs[agent_id], values[agent_id],
+                rewards[agent_id]
             )
 
     def update(self, next_obss, next_dones):
@@ -291,3 +292,13 @@ class IPPO_LSTM:
         for agent_id in self.possible_agents:
             metrics[agent_id] = self.agents[agent_id].update(next_obss[agent_id], next_dones[agent_id])
         return metrics
+
+    def save_model(self, dir_name=None):
+        path = f"saved_models/ippo-{self.create_at}"
+        if dir_name is not None:
+            path = os.path.join(path, dir_name)
+        os.makedirs(path, exist_ok=True)
+
+        for agent_id, agent in self.agents.items():
+            filepath = os.path.join(path, f"ippo_{self.args.env_id}_{agent_id}.pth")
+            torch.save(agent.model.state_dict(), filepath)

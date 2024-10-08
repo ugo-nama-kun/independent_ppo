@@ -1,3 +1,4 @@
+import datetime
 import os
 from dataclasses import dataclass
 
@@ -5,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from shtab import Optional
 
 from torch.distributions.categorical import Categorical
 
@@ -95,6 +97,8 @@ class PPO_LSTM:
             self.lstm_state[0].clone(),
             self.lstm_state[1].clone()
         )
+
+        self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
 
     def reset_lstm_state(self):
         self.lstm_state = (
@@ -239,3 +243,12 @@ class PPO_LSTM:
             np.mean(clipfracs),
             explained_var,
         )
+
+    def save_model(self, dir_name=None):
+        path = f"saved_models/ppo-{self.create_at}"
+        if dir_name is not None:
+            path = os.path.join(path, dir_name)
+        os.makedirs(path, exist_ok=True)
+
+        filepath = os.path.join(path, f"ppo_{self.args.env_id}.pth")
+        torch.save(self.agent.state_dict(), filepath)

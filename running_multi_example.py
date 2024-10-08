@@ -10,7 +10,7 @@ import torch
 import tyro
 
 from torch.utils.tensorboard import SummaryWriter
-from pettingzoo.mpe import simple_reference_v3
+from pettingzoo.mpe import simple_reference_v3, simple_v3
 
 from ippo_lstm import IPPO_LSTM
 from sync_vector_ma_env import SyncVectorMAEnv
@@ -81,11 +81,13 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    save_every: int = 10
+
 
 def make_env():
     def thunk():
-        env = simple_reference_v3.parallel_env(continuous_actions=False)
-        # env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = simple_v3.parallel_env(continuous_actions=False)
+        # env = simple_reference_v3.parallel_env(continuous_actions=False)
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -138,13 +140,19 @@ if __name__ == "__main__":
     global_step = 0
     start_time = time.time()
     next_obs, _ = ma_envs.reset(seed=args.seed)
-    next_obs = {agent : torch.Tensor(next_obs[agent]).to(device) for agent in next_obs.keys()}
+    next_obs = {agent: torch.Tensor(next_obs[agent]).to(device) for agent in next_obs.keys()}
     next_done = {agent: torch.zeros(args.num_envs).to(device) for agent in ma_envs.ma_envs[0].possible_agents}
 
     # reset ppo lstm state
     ippo_agent.reset_lstm_state()
 
+    ippo_agent.save_model(dir_name=str(1))
     for iteration in range(1, args.num_iterations + 1):
+        # save
+        if np.mod(iteration, args.save_every) == 0:
+            print(f"SAVE Models. @ {iteration}")
+            ippo_agent.save_model(dir_name=str(iteration))
+
         # saving initial lstm state of the rollout
         ippo_agent.save_initial_lstm_state()
 
@@ -174,7 +182,8 @@ if __name__ == "__main__":
                     if "final_info" in infos[agent_id][env_id]:
                         info = infos[agent_id][env_id]["final_info"]
                         if "episode" in info:
-                            print(f"global_step={global_step}, episodic_return={info['episode']['r']}, episodic_length={info['episode']['l']}")
+                            print(
+                                f"global_step={global_step}, episodic_return={info['episode']['r']}, episodic_length={info['episode']['l']}")
                             writer.add_scalar(f"charts/episodic_return/{agent_id}", info["episode"]["r"], global_step)
                             writer.add_scalar(f"charts/episodic_length/{agent_id}", info["episode"]["l"], global_step)
 
@@ -194,5 +203,6 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
+    ppo.save_model(dir_name="final")
     ma_envs.close()
     writer.close()
