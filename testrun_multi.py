@@ -6,7 +6,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import tyro
-from pettingzoo.mpe import simple_v3, simple_reference_v3
+from pettingzoo.mpe import simple_speaker_listener_v4
 
 from ippo_lstm import IPPO_LSTM
 from sync_vector_ma_env import SyncVectorMAEnv
@@ -19,7 +19,7 @@ class Args:
     # Algorithm specific arguments
     capture_video: bool = False
     # remove agent name and .pth to identify model path
-    file_path: str = "saved_models/ippo-2024-10-08_18-47-08-359570/final/ippo_SimpleReference"
+    file_path: str = "saved_models/ippo-2024-10-21_16-33-06-466824/20/ippo_SimpleSpeakerListener-vv"
     seed: int = 42
     torch_deterministic: bool = True
     num_envs = 1
@@ -27,8 +27,7 @@ class Args:
 
 def make_env():
     def thunk():
-        # env = simple_v3.parallel_env(continuous_actions=False, render_mode="human")
-        env = simple_reference_v3.parallel_env(continuous_actions=False, render_mode="human")
+        env = simple_speaker_listener_v4.parallel_env(continuous_actions=False, render_mode="human")
         env = RecordParallelEpisodeStatistics(env)
         return env
 

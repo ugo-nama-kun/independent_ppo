@@ -21,17 +21,17 @@ class Model(nn.Module):
         self.network = nn.Sequential(
             layer_init(nn.Linear(np.prod(observation_space.shape), 64)),
             nn.ELU(),
-            layer_init(nn.Linear(64, 32)),
+            layer_init(nn.Linear(64, 64)),
             nn.ELU(),
         )
-        self.lstm = nn.LSTM(32, 32)
+        self.lstm = nn.LSTM(64, 64)
         for name, param in self.lstm.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
             elif "weight" in name:
-                nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(32, action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(32, 1), std=1)
+                nn.init.orthogonal_(param, 0.9)
+        self.actor = layer_init(nn.Linear(64, action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(64, 1), std=1)
 
     def get_states(self, x, lstm_state, done):
         hidden = self.network(x)
@@ -243,7 +243,6 @@ class PPO_LSTM:
             pg_loss.item(),
             entropy_loss.item(),
             old_approx_kl.item(),
-            approx_kl.item(),
             approx_kl.item(),
             np.mean(clipfracs),
             explained_var,

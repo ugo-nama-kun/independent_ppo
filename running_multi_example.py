@@ -10,7 +10,7 @@ import torch
 import tyro
 
 from torch.utils.tensorboard import SummaryWriter
-from pettingzoo.mpe import simple_reference_v3, simple_v3
+from pettingzoo.mpe import simple_speaker_listener_v4
 
 from ippo_lstm import IPPO_LSTM
 from sync_vector_ma_env import SyncVectorMAEnv
@@ -38,25 +38,25 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "SimpleReference"
+    env_id: str = "SimpleSpeakerListener-vv"
     """the id of the environment"""
-    total_timesteps: int = 50_000_000
+    total_timesteps: int = 1_000_000
     """total timesteps of the experiments"""
-    learning_rate: float = 0.003
+    learning_rate: float = 0.001
     """the learning rate of the optimizer"""
-    num_envs: int = 8
+    num_envs: int = 16
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 1000
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.95
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 4
     """the number of mini-batches"""
-    update_epochs: int = 4
+    update_epochs: int = 6
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -64,11 +64,11 @@ class Args:
     """the surrogate clipping coefficient"""
     clip_vloss: bool = True
     """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
-    ent_coef: float = 0.01
+    ent_coef: float = 0.0
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
-    max_grad_norm: float = 0.5
+    max_grad_norm: float = 0.3
     """the maximum norm for the gradient clipping"""
     target_kl: float = None
     """the target KL divergence threshold"""
@@ -81,13 +81,12 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    save_every: int = 1000
+    save_every: int = 10
 
 
 def make_env():
     def thunk():
-        # env = simple_v3.parallel_env(continuous_actions=False)
-        env = simple_reference_v3.parallel_env(continuous_actions=False)
+        env = simple_speaker_listener_v4.parallel_env(continuous_actions=False)
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -148,6 +147,8 @@ if __name__ == "__main__":
 
     ippo_agent.save_model(dir_name=str(1))
     for iteration in range(1, args.num_iterations + 1):
+        writer.add_scalar(f"charts/iteration", iteration, global_step)
+
         # save
         if np.mod(iteration, args.save_every) == 0:
             print(f"SAVE Models. @ {iteration}")
