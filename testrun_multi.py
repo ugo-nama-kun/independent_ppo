@@ -19,7 +19,7 @@ class Args:
     # Algorithm specific arguments
     capture_video: bool = False
     # remove agent name and .pth to identify model path
-    file_path: str = "saved_models/ippo-2024-10-21_16-33-06-466824/20/ippo_SimpleSpeakerListener-vv"
+    file_path: str = "saved_models/SimpleSpeakerListener-vv__running_multi_example__1__1729843739/1"
     seed: int = 42
     torch_deterministic: bool = True
     num_envs = 1
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ippo_agent = IPPO_LSTM(ma_envs, device, args, test=True)
+    ippo_agent = IPPO_LSTM(ma_envs, device, args, run_name="test", test=True)
     ippo_agent.load_model(args.file_path)
     ippo_agent.eval()
 

@@ -250,9 +250,10 @@ class PPO_LSTM:
 
 
 class IPPO_LSTM:
-    def __init__(self, ma_envs, device, args, test=False):
+    def __init__(self, ma_envs, device, args, run_name, test=False):
         self.args = args
         self.device = device
+        self.run_name = run_name
 
         self.possible_agents = ma_envs.ma_envs[0].possible_agents
         self.agents = {
@@ -308,13 +309,13 @@ class IPPO_LSTM:
         return metrics
 
     def save_model(self, dir_name=None):
-        path = f"saved_models/ippo-{self.create_at}"
+        path = f"saved_models/{self.run_name}"
         if dir_name is not None:
             path = os.path.join(path, dir_name)
         os.makedirs(path, exist_ok=True)
 
         for agent_id, agent in self.agents.items():
-            filepath = os.path.join(path, f"ippo_{self.args.env_id}_{agent_id}.pth")
+            filepath = os.path.join(path, f"{agent_id}.pth")
             torch.save(agent.model.state_dict(), filepath)
 
         print(f" Saved at {path}")
@@ -322,4 +323,4 @@ class IPPO_LSTM:
     def load_model(self, file_path):
         assert isinstance(file_path, str)
         for agent_id, agent in self.agents.items():
-            agent.model.load_state_dict(torch.load(file_path + "_" + agent_id + ".pth", weights_only=True))
+            agent.model.load_state_dict(torch.load(file_path + "/" + agent_id + ".pth", weights_only=True))

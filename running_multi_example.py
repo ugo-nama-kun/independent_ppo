@@ -133,7 +133,7 @@ if __name__ == "__main__":
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ippo_agent = IPPO_LSTM(ma_envs, device, args)
+    ippo_agent = IPPO_LSTM(ma_envs, device, args, run_name)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
