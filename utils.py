@@ -18,9 +18,9 @@ def dict_tensor(data_dict: Dict[str, torch.Tensor], device: torch.device):
 def test_env_single(agent, test_envs, device, render=False):
     agent.eval()
 
-    episode_reward = 0
-    episode_length = 0
-    ave_reward = 0
+    episode_reward = 0.0
+    episode_length = 0.0
+    ave_reward = 0.0
 
     n_runs = len(test_envs.envs)
 
@@ -28,11 +28,12 @@ def test_env_single(agent, test_envs, device, render=False):
 
     obs, info = test_envs.reset()
     obs = torch.Tensor(obs).to(device)
+    done = torch.Tensor([False,]*n_runs).to(device)
 
     while np.any(list(not_done_flags.values())):
 
         with torch.no_grad():
-            action, _, _, _ = agent.get_action_and_value(obs)
+            action, _, _ = agent.get_action_and_value(obs, done)
 
         obs, reward, done, truncated, info = test_envs.step(action.cpu().numpy())
         done = done | truncated
@@ -41,17 +42,19 @@ def test_env_single(agent, test_envs, device, render=False):
             test_envs.envs[0].render()
 
         obs = torch.Tensor(obs).to(device)
+        done = torch.Tensor(done).to(device)
 
-        if np.any(done):
-            for i in np.where(info["_episode"])[0]:
+        if np.any(done.cpu().numpy()):
+            for i in np.where(info["final_info"])[0]:
                 if not_done_flags[i] is True:
                     not_done_flags[i] = False
+                    info_ = info["final_info"][i]
                     print(
-                        f"TEST: episodic_return={info['episode']['r'][i]}, episodic_length={info['episode']['l'][i]}")
+                        f"TEST: episodic_return={info_['episode']['r']}, episodic_length={info_['episode']['l']}")
 
-                    episode_reward += info['episode']['r'][i]
-                    episode_length += info['episode']['l'][i]
-                    ave_reward += info['episode']['r'][i] / info['episode']['l'][i]
+                    episode_reward += info_['episode']['r']
+                    episode_length += info_['episode']['l']
+                    ave_reward += info_['episode']['r'] / info_['episode']['l']
 
                 if np.any(list(not_done_flags.values())) is False:
                     break

@@ -1,0 +1,9 @@
+gym==0.23.1
+gymnasium==0.28.1
+numpy==1.26.4
+opencv-python==4.11.0.86
+pettingzoo==1.24.3
+stable_baselines3==2.4.1
+tensorboard==2.18.0
+torch==2.5.1
+tyro==0.9.11
