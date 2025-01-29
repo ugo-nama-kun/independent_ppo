@@ -19,7 +19,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
     NoopResetEnv,
 )
 
-from ppo_lstm_vision import PPO_LSTM_V
+from ppo_lstm_vision import PPO_LSTM_VISION
 
 
 @dataclass
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ppo_atari_agent = PPO_LSTM_V(envs, device, args)
+    ppo_atari_agent = PPO_LSTM_VISION(envs, device, args)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0

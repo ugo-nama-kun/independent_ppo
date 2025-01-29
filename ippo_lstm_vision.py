@@ -1,6 +1,5 @@
 import datetime
 import os
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -17,27 +16,28 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Model(nn.Module):
-    def __init__(self, envs):
+    def __init__(self, action_space, observation_space):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(1, 32, 8, stride=4)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
+            layer_init(nn.Conv2d(6, 32, 4, stride=1)),
+            nn.LayerNorm([32, 4, 4]),
+            nn.ELU(),
+            layer_init(nn.Conv2d(32, 32, 2, stride=1)),
+            nn.LayerNorm([32, 3, 3]),
+            nn.ELU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
-            nn.ReLU(),
+            layer_init(nn.Linear(32 * 3 * 3, 128)),
+            nn.LayerNorm(128),
+            nn.ELU(),
         )
-        self.lstm = nn.LSTM(512, 128)
+        self.lstm = nn.LSTM(128, 64)
         for name, param in self.lstm.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
             elif "weight" in name:
                 nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(128, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(128, 1), std=1)
+        self.actor = layer_init(nn.Linear(64, action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(64, 1), std=1)
 
     def get_states(self, x, lstm_state, done):
         hidden = self.network(x / 255.0)
@@ -73,20 +73,21 @@ class Model(nn.Module):
 
 
 class PPO_LSTM_VISION:
-    def __init__(self, envs, device, args, test=False):
+    def __init__(self, agent_id, env, device, args, test=False):
+        self.agent_id = agent_id
         self.args = args
         self.device = device
-        self.single_action_space = envs.single_action_space
-        self.single_observation_space = envs.single_observation_space
+        self.single_action_space = env.action_spaces[agent_id]
+        self.single_observation_space = env.observation_spaces[agent_id]
 
-        self.model = Model(envs).to(device)
+        self.model = Model(self.single_action_space, self.single_observation_space).to(device)
 
         if not test:
             self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate, eps=1e-5)
 
             # ALGO Logic: Storage setup
-            self.obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-            self.actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+            self.obs = torch.zeros((args.num_steps, args.num_envs) + self.single_observation_space.shape).to(device)
+            self.actions = torch.zeros((args.num_steps, args.num_envs) + self.single_action_space.shape).to(device)
             self.logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
             self.rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
             self.dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -255,15 +256,79 @@ class PPO_LSTM_VISION:
             explained_var,
         )
 
+
+class IPPO_LSTM_VISION:
+    def __init__(self, ma_envs, device, args, run_name, test=False):
+        self.args = args
+        self.device = device
+        self.run_name = run_name
+
+        self.possible_agents = ma_envs.ma_envs[0].possible_agents
+        self.agents = {
+            agent: PPO_LSTM_VISION(agent, ma_envs.ma_envs[0], device, args, test=test)
+            for agent in ma_envs.ma_envs[0].possible_agents
+        }
+
+        self.create_at = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+
+    def eval(self):
+        for agent in self.agents.values():
+            agent.eval()
+
+    def train(self):
+        for agent in self.agents.values():
+            agent.train()
+
+    def reset_lstm_state(self):
+        for agent_ in self.agents.values():
+            agent_.reset_lstm_state()
+
+    def save_initial_lstm_state(self):
+        for agent_ in self.agents.values():
+            agent_.save_initial_lstm_state()
+
+    def update_learning_rate(self, iteration):
+        for agent_ in self.agents.values():
+            agent_.update_learning_rate(iteration)
+
+    def get_action_and_value(self, obss, dones):
+        actions = {}
+        logprobs = {}
+        values = {}
+
+        for agent_id in self.possible_agents:
+            actions[agent_id], logprobs[agent_id], values[agent_id] = self.agents[agent_id].get_action_and_value(
+                obss[agent_id], dones[agent_id])
+
+        return actions, logprobs, values
+
+    def collect(self, step: int, dones, obss, actions, logprobs, values, rewards):
+        for agent_id in self.possible_agents:
+            self.agents[agent_id].collect(
+                step,
+                dones[agent_id], obss[agent_id], actions[agent_id], logprobs[agent_id], values[agent_id],
+                rewards[agent_id]
+            )
+
+    def update(self, next_obss, next_dones):
+        metrics = {}
+        for agent_id in self.possible_agents:
+            metrics[agent_id] = self.agents[agent_id].update(next_obss[agent_id], next_dones[agent_id])
+        return metrics
+
     def save_model(self, dir_name=None):
-        path = f"saved_models/ppo-vision_{self.create_at}"
+        path = f"saved_models/{self.run_name}"
         if dir_name is not None:
             path = os.path.join(path, dir_name)
         os.makedirs(path, exist_ok=True)
 
-        filepath = os.path.join(path, f"ppo-vision_{self.args.env_id}.pth")
-        torch.save(self.model.state_dict(), filepath)
+        for agent_id, agent in self.agents.items():
+            filepath = os.path.join(path, f"{agent_id}.pth")
+            torch.save(agent.model.state_dict(), filepath)
+
+        print(f" Saved at {path}")
 
     def load_model(self, file_path):
         assert isinstance(file_path, str)
-        self.model.load_state_dict(torch.load(file_path))
+        for agent_id, agent in self.agents.items():
+            agent.model.load_state_dict(torch.load(file_path + "/" + agent_id + ".pth", weights_only=True))

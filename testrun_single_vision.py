@@ -10,7 +10,7 @@ from stable_baselines3.common.atari_wrappers import NoopResetEnv, MaxAndSkipEnv,
     ClipRewardEnv
 
 from ppo_lstm import PPO_LSTM
-from ppo_lstm_vision import PPO_LSTM_V
+from ppo_lstm_vision import PPO_LSTM_VISION
 
 
 @dataclass
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ppo_agent = PPO_LSTM_V(envs, device, args, test=True)
+    ppo_agent = PPO_LSTM_VISION(envs, device, args, test=True)
     ppo_agent.load_model(args.file_path)
     ppo_agent.eval()
     ppo_agent.reset_lstm_state()

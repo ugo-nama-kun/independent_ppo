@@ -10,9 +10,9 @@ import torch
 import tyro
 
 from torch.utils.tensorboard import SummaryWriter
-from pettingzoo.mpe import simple_speaker_listener_v4
+from gridhunt.envs import MultiHunt2APZ, MultiHunt1APZ
 
-from ippo_lstm import IPPO_LSTM
+from ippo_lstm_vision import IPPO_LSTM_VISION
 from sync_vector_ma_env import SyncVectorMAEnv
 from utils import dict_detach, dict_cpu_numpy, dict_tensor
 from wrapper import RecordParallelEpisodeStatistics
@@ -38,11 +38,11 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "SimpleSpeakerListener-vv"
+    env_id: str = "MultiHunt2APZ-v0"
     """the id of the environment"""
-    total_timesteps: int = 1_000_000
+    total_timesteps: int = 10_000_000
     """total timesteps of the experiments"""
-    learning_rate: float = 0.001
+    learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 16
     """the number of parallel game environments"""
@@ -86,7 +86,7 @@ class Args:
 
 def make_env():
     def thunk():
-        env = simple_speaker_listener_v4.parallel_env(continuous_actions=False)
+        env = MultiHunt1APZ()
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # agent = Agent(envs).to(device)
-    ippo_agent = IPPO_LSTM(ma_envs, device, args, run_name)
+    ippo_agent = IPPO_LSTM_VISION(ma_envs, device, args, run_name)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
