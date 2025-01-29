@@ -40,7 +40,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "MultiHunt2APZ-v0"
     """the id of the environment"""
-    total_timesteps: int = 10_000_000
+    total_timesteps: int = 1_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -84,9 +84,9 @@ class Args:
     save_every: int = 10
 
 
-def make_env():
+def make_env(env_id):
     def thunk():
-        env = MultiHunt1APZ()
+        env = MultiHunt2APZ() if "MultiHunt2APZ" in env_id else MultiHunt1APZ()
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     # env setup
     ma_envs = SyncVectorMAEnv(
-        [make_env() for i in range(args.num_envs)],
+        [make_env(args.env_id) for i in range(args.num_envs)],
     )
     for action_space in ma_envs.single_joint_action_space.values():
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"

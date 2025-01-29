@@ -16,18 +16,19 @@ from wrapper import RecordParallelEpisodeStatistics
 
 @dataclass
 class Args:
+    env_id: str = "MultiHunt2APZ"
     # Algorithm specific arguments
     capture_video: bool = False
     # remove agent name and .pth to identify model path
-    file_path: str = "saved_models/MultiHunt2APZ-v0__running_multi_vision_example__1__1738135083/20"
+    file_path: str = "saved_models/MultiHunt2APZ-v0__running_multi_vision_example__1__1738137439/final"
     seed: int = 42
     torch_deterministic: bool = True
     num_envs = 1
 
 
-def make_env():
+def make_env(env_id):
     def thunk():
-        env = MultiHunt1APZ(render_mode="human")
+        env = MultiHunt2APZ(render_mode="human") if "MultiHunt2APZ" in env_id else MultiHunt1APZ(render_mode="human")
         env = RecordParallelEpisodeStatistics(env)
         return env
 
@@ -47,7 +48,7 @@ if __name__ == "__main__":
 
     # env setup
     ma_envs = SyncVectorMAEnv(
-        [make_env()],
+        [make_env(args.env_id)],
     )
     for action_space in ma_envs.single_joint_action_space.values():
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"
