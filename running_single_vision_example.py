@@ -20,6 +20,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 )
 
 from ppo_lstm_vision import PPO_LSTM_VISION
+from utils import test_env_single
 
 
 @dataclass
@@ -86,6 +87,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     save_every: int = 10
+    test_every: int = 10
+    # TODO: Update to use different number of tests from training run
+    num_tests: int = num_envs
 
 
 def make_env(env_id, idx, capture_video, run_name):
@@ -94,8 +98,7 @@ def make_env(env_id, idx, capture_video, run_name):
             env = gym.make(env_id, render_mode="rgb_array")
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+            env = gym.make(env_id, render_mode="rgb_array")
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=4)
         env = EpisodicLifeEnv(env)
@@ -105,6 +108,7 @@ def make_env(env_id, idx, capture_video, run_name):
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, 1)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
         return env
 
     return thunk
@@ -146,10 +150,12 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
     )
+    test_envs = gym.vector.SyncVectorEnv(
+        [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_tests)],
+    )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    # agent = Agent(envs).to(device)
-    ppo_atari_agent = PPO_LSTM_VISION(envs, device, args)
+    ppo_agent = PPO_LSTM_VISION(envs, device, args)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -159,26 +165,32 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     # reset ppo lstm state
-    ppo_atari_agent.reset_lstm_state()
+    ppo_agent.reset_lstm_state()
 
-    ppo_atari_agent.save_model(dir_name=str(1))
+    ppo_agent.save_model(dir_name=str(1))
     for iteration in range(1, args.num_iterations + 1):
         # save
         if np.mod(iteration, args.save_every) == 0:
             print(f"SAVE Models. @ {iteration}")
-            ppo_atari_agent.save_model(dir_name=str(iteration))
+            ppo_agent.save_model(dir_name=str(iteration))
+
+        if np.mod(iteration, args.test_every) == 0:
+            episode_reward, episode_length, ave_reward = test_env_single(ppo_agent, test_envs, device, render=True)
+            writer.add_scalar("test/episode_reward", episode_reward, global_step)
+            writer.add_scalar("test/episode_length", episode_length, global_step)
+            writer.add_scalar("test/average_reward", ave_reward, global_step)
 
         # saving initial lstm state of the rollout
-        ppo_atari_agent.save_initial_lstm_state()
+        ppo_agent.save_initial_lstm_state()
 
         # Annealing the rate if instructed to do so.
-        ppo_atari_agent.update_learning_rate(iteration)
+        ppo_agent.update_learning_rate(iteration)
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            action, logprob, values = ppo_atari_agent.get_action_and_value(next_obs, next_done)
+            action, logprob, values = ppo_agent.get_action_and_value(next_obs, next_done)
 
             # copy previous obs and done
             next_done_prev, next_obs_prev = next_done.detach(), next_obs.detach()
@@ -187,7 +199,7 @@ if __name__ == "__main__":
             next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
 
             # store experience here
-            ppo_atari_agent.collect(step, next_done_prev, next_obs_prev, action, logprob, values, reward)
+            ppo_agent.collect(step, next_done_prev, next_obs_prev, action, logprob, values, reward)
 
             next_done = np.logical_or(terminations, truncations)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -200,7 +212,7 @@ if __name__ == "__main__":
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
         # optimize
-        metrics = ppo_atari_agent.update(next_obs, next_done)
+        metrics = ppo_agent.update(next_obs, next_done)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         writer.add_scalar("charts/learning_rate", metrics[0], global_step)
@@ -214,6 +226,6 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-    ppo_atari_agent.save_model(dir_name="final")
+    ppo_agent.save_model(dir_name="final")
     envs.close()
     writer.close()

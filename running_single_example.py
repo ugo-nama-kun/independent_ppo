@@ -80,7 +80,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     save_every: int = 10
-    test_every: int = 20
+    test_every: int = 2
+    # TODO: Update to use different number of tests from training run
+    num_tests: int = num_envs
 
 
 def make_env(env_id, idx, capture_video, run_name):
@@ -134,7 +136,7 @@ if __name__ == "__main__":
         [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
     )
     test_envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.num_envs + i, args.capture_video, run_name) for i in range(args.num_envs)],
+        [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_tests)],
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -160,8 +162,8 @@ if __name__ == "__main__":
         if np.mod(iteration, args.test_every) == 0:
             episode_reward, episode_length, ave_reward = test_env_single(ppo_agent, test_envs, device, render=True)
             writer.add_scalar("test/episode_reward", episode_reward, global_step)
-            writer.add_scalar("test/episode_length", episode_reward, global_step)
-            writer.add_scalar("test/average_reward", episode_reward, global_step)
+            writer.add_scalar("test/episode_length", episode_length, global_step)
+            writer.add_scalar("test/average_reward", ave_reward, global_step)
 
         # saving initial lstm state of the rollout
         ppo_agent.save_initial_lstm_state()

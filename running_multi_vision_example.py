@@ -14,7 +14,7 @@ from gridhunt.envs import MultiHunt2APZ, MultiHunt1APZ
 
 from ippo_lstm_vision import IPPO_LSTM_VISION
 from sync_vector_ma_env import SyncVectorMAEnv
-from utils import dict_detach, dict_cpu_numpy, dict_tensor
+from utils import dict_detach, dict_cpu_numpy, dict_tensor, test_env_multi
 from wrapper import RecordParallelEpisodeStatistics
 
 
@@ -82,7 +82,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     save_every: int = 10
-
+    test_every: int = 2
+    # TODO: Update to use different number of tests from training run
+    num_tests: int = num_envs
 
 def make_env(env_id):
     def thunk():
@@ -129,6 +131,9 @@ if __name__ == "__main__":
     ma_envs = SyncVectorMAEnv(
         [make_env(args.env_id) for i in range(args.num_envs)],
     )
+    test_ma_envs = SyncVectorMAEnv(
+        [make_env(args.env_id) for i in range(args.num_tests)],
+    )
     for action_space in ma_envs.single_joint_action_space.values():
         assert isinstance(action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -153,6 +158,13 @@ if __name__ == "__main__":
         if np.mod(iteration, args.save_every) == 0:
             print(f"SAVE Models. @ {iteration}")
             ippo_agent.save_model(dir_name=str(iteration))
+
+        if np.mod(iteration, args.test_every) == 0:
+            episode_reward, episode_length, ave_reward = test_env_multi(ippo_agent, test_ma_envs, device, render=True)
+            for agent_id in ma_envs.possible_agents:
+                writer.add_scalar(f"test/episode_reward/{agent_id}", episode_reward[agent_id], global_step)
+                writer.add_scalar(f"test/episode_length/{agent_id}", episode_length[agent_id], global_step)
+                writer.add_scalar(f"test/average_reward/{agent_id}", ave_reward[agent_id], global_step)
 
         # saving initial lstm state of the rollout
         ippo_agent.save_initial_lstm_state()
