@@ -9,22 +9,27 @@ Multi-agent settings are [PettingZoo](https://pettingzoo.farama.org/) compatible
 
 ### PPO Single Agent + LSTM
 
-- `ppo_lstm` (usage: [running_single_example.py](running_single_example.py))
+- `ppo_lstm` (usage: [running_single_example.py](running_ppo_lstm_example.py))
 
 PPO agent with LSTM memory cells. Discrete action.
 
-- `ppo_lstm_vision.py` (usage: [running_single_vision_example.py](running_single_vision_example.py))
+- `ppo_lstm_vision.py` (usage: [running_single_vision_example.py](running_ppo_lstm_vision_example.py))
 
 PPO agent with LSTM memory cells. Discrete action. Vision inputs.
 
-### Independent PPO Multi Agent + LSTM
+### Independent PPO Multi Agent
 
-- `ippo_lstm` (usage: [running_multi_example.py](running_multi_example.py))
+- `ippo` (usage: [running_ippo_example.py](running_ippo_example.py))
+
+Multi-agent setting. 
+[Independent PPO](https://arxiv.org/abs/2011.09533) agent. Discrete action.
+
+- `ippo_lstm` (usage: [running_ippo_lstm_example.py](running_ippo_lstm_example.py))
 
 Multi-agent setting.
 [Independent PPO](https://arxiv.org/abs/2011.09533) agent with LSTM memory cells. Discrete action.
 
-- `ippo_lstm_vision.py` (usage: [running_multi_vision_example.py](running_multi_vision_example.py))
+- `ippo_lstm_vision.py` (usage: [running_ippo_lstm_vision_example.py](running_ippo_lstm_vision_example.py))
 
 Multi-agent setting.
 [Independent PPO](https://arxiv.org/abs/2011.09533) agent with LSTM memory cells. Discrete action. Vision inputs.
