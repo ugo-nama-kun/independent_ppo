@@ -36,10 +36,12 @@ Multi-agent setting.
 
 # Mimimum codes for running multi-agent custom setting
 ```text
-ippo_lstm.py/ ippo_lstm_vision.py
+ippo_*.py
 utils.py
 vector_ma_env.py
 sync_vector_ma_env.py
+running_ippo_*_example.py # for training
+testrun_ippo*.py  # for test run using trained models
 ```
 
 # Requirements
