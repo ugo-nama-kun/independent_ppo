@@ -257,4 +257,10 @@ class IPPO:
     def load_model(self, file_path):
         assert isinstance(file_path, str)
         for agent_id, agent in self.agents.items():
-            agent.model.load_state_dict(torch.load(file_path + "/" + agent_id + ".pth", weights_only=True))
+            agent.model.load_state_dict(
+                torch.load(
+                    file_path + "/" + agent_id + ".pth",
+                    weights_only=True,
+                    map_location=torch.device('cpu')
+                )
+            )

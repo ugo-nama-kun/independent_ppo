@@ -262,4 +262,10 @@ class PPO_LSTM:
 
     def load_model(self, file_path):
         assert isinstance(file_path, str)
-        self.model.load_state_dict(torch.load(file_path))
+        self.model.load_state_dict(
+            torch.load(
+                file_path,
+                weights_only=True,
+                map_location=torch.device('cpu')
+            )
+        )
